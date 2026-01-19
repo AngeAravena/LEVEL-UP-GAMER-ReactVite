@@ -10,7 +10,7 @@ vi.mock('../context/AppContext.jsx', () => ({
 
 import { useApp } from '../context/AppContext.jsx'
 
-// 🔧 Helper para renderizar con router
+// Helper para renderizar con router
 const renderWithRouter = (ui) => {
   return render(
     <MemoryRouter>
