@@ -1,13 +1,14 @@
 import { createContext, useContext, useEffect, useMemo, useState } from 'react';
-import { defaultProducts, defaultUsers, legacyIdMap } from '../data/defaults.js';
-
+import { defaultUsers, legacyIdMap } from '../data/defaults.js';
+import { getProductos } from '../services/api';
 const AppContext = createContext(null);
 
 const STORAGE_KEYS = {
   products: 'products',
   users: 'users',
   session: 'session',
-  cart: 'cart'
+  cart: 'cart',
+  receipts: 'receipts'
 };
 
 const loadFromStorage = (key, fallback) => {
@@ -50,15 +51,44 @@ const normalizeCart = (cart = []) => cart.map((item) => {
   return item;
 });
 
+const dedupeById = (list = []) => {
+  const seen = new Set();
+  return list.filter((p) => {
+    const key = String(p?.id ?? '');
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+};
+
 const nextProductId = (products) => (products.length ? Math.max(...products.map((p) => Number(p.id))) + 1 : 0);
 const nextUserId = (users) => (users.length ? Math.max(...users.map((u) => Number(u.id) || 0)) + 1 : 1);
 
 export const AppProvider = ({ children }) => {
-  const [products, setProducts] = useState(() => loadFromStorage(STORAGE_KEYS.products, defaultProducts));
+  const [products, setProducts] = useState([]);
   const [users, setUsers] = useState(() => normalizeUsers(loadFromStorage(STORAGE_KEYS.users, defaultUsers)));
   const [session, setSession] = useState(() => loadFromStorage(STORAGE_KEYS.session, null));
   const [cart, setCart] = useState(() => normalizeCart(loadFromStorage(STORAGE_KEYS.cart, [])));
+  const [receipts, setReceipts] = useState(() => loadFromStorage(STORAGE_KEYS.receipts, []));
   const [toasts, setToasts] = useState([]);
+
+  // always dedupe when setting products
+  const setProductsSafe = (updater) => {
+    setProducts((prev) => {
+      const next = typeof updater === 'function' ? updater(prev) : updater;
+      return dedupeById(next);
+    });
+  };
+
+  const productsSafe = useMemo(() => dedupeById(products), [products]);
+
+  useEffect(() => {
+    // Debug: inspeccionar productos cargados en runtime
+    if (typeof window !== 'undefined') {
+      window.__products = productsSafe;
+      // console.log('productsSafe length', productsSafe.length);
+    }
+  }, [productsSafe]);
 
   useEffect(() => {
     const seed = defaultUsers[0];
@@ -70,16 +100,24 @@ export const AppProvider = ({ children }) => {
     });
   }, []);
 
-  useEffect(() => saveToStorage(STORAGE_KEYS.products, products), [products]);
+  // products se obtienen del backend; no se persisten en localStorage para evitar duplicados
   useEffect(() => saveToStorage(STORAGE_KEYS.users, users), [users]);
   useEffect(() => saveToStorage(STORAGE_KEYS.session, session), [session]);
   useEffect(() => saveToStorage(STORAGE_KEYS.cart, cart), [cart]);
+  useEffect(() => saveToStorage(STORAGE_KEYS.receipts, receipts), [receipts]);
 
   useEffect(() => {
-    if (!products.every((p) => Number.isInteger(p.id))) {
-      setProducts(defaultProducts);
-    }
-  }, [products]);
+    (async () => {
+      try {
+        const resp = await getProductos();
+        if (Array.isArray(resp.data)) {
+          setProductsSafe(resp.data);
+        }
+      } catch (err) {
+        console.error('Error cargando productos desde backend', err);
+      }
+    })();
+  }, []);
 
   const notify = (message, duration = 2200) => {    //pop up base para notificaciones
     const id = (globalThis.crypto?.randomUUID?.() || String(Date.now() + Math.random()));
@@ -137,18 +175,18 @@ export const AppProvider = ({ children }) => {
 
   const upsertProduct = (payload, editingId) => {
     if (editingId !== undefined && editingId !== null) {
-      setProducts((prev) => prev.map((p) => (p.id === editingId ? { ...p, ...payload } : p)));
+      setProductsSafe((prev) => prev.map((p) => (p.id === editingId ? { ...p, ...payload } : p)));
       notify('Producto actualizado');
       return editingId;
     }
     const newId = nextProductId(products);
-    setProducts((prev) => [...prev, { id: newId, ...payload }]);
+    setProductsSafe((prev) => [...prev, { id: newId, ...payload }]);
     notify('Producto creado');
     return newId;
   };
 
   const deleteProduct = (id) => {
-    setProducts((prev) => prev.filter((p) => p.id !== id));
+    setProductsSafe((prev) => prev.filter((p) => p.id !== id));
     setCart((prev) => prev.filter((item) => item.id !== id));
     notify('Producto eliminado');
   };
@@ -199,19 +237,39 @@ export const AppProvider = ({ children }) => {
 
   const clearCart = () => setCart([]);
 
+  const recordReceipt = ({ userId, items, subtotal, discount = 0, total, method, cuotas = '', buyer }) => {
+    if (!userId || !items?.length) return false;
+    const id = globalThis.crypto?.randomUUID?.() || String(Date.now());
+    const entry = {
+      id,
+      userId,
+      items,
+      subtotal,
+      discount,
+      total,
+      method,
+      cuotas,
+      buyer,
+      createdAt: new Date().toISOString()
+    };
+    setReceipts((prev) => [entry, ...prev]);
+    return true;
+  };
+
   const cartCount = useMemo(() => cart.reduce((acc, cur) => acc + cur.qty, 0), [cart]);
   const cartTotal = useMemo(() => cart.reduce((acc, item) => {
-    const product = products.find((p) => p.id === item.id);
+    const product = productsSafe.find((p) => p.id === item.id);
     return acc + (product ? product.price * item.qty : 0);
-  }, 0), [cart, products]);
+  }, 0), [cart, productsSafe]);
 
   const value = {
-    products,
+    products: productsSafe,
     users,
     session,
     cart,
     cartCount,
     cartTotal,
+    receipts,
     toasts,
     notify,
     login,
@@ -222,13 +280,14 @@ export const AppProvider = ({ children }) => {
     updateCartQty,
     removeFromCart,
     clearCart,
+    recordReceipt,
     upsertProduct,
     deleteProduct,
     upsertUser,
     deleteUser,
     setSession,
     setCart,
-    setProducts,
+    setProducts: setProductsSafe,
     setUsers
   };
 

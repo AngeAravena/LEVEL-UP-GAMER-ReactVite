@@ -12,6 +12,7 @@ import { AdminLoginPage } from './pages/AdminLogin.jsx';
 import { AdminPanelPage } from './pages/AdminPanel.jsx';
 import { PaymentPage } from './pages/Payment.jsx';
 import { NotFoundPage } from './pages/NotFound.jsx';
+import { ProfilePage } from './pages/Profile.jsx';
 
 function App() {
   return (
@@ -26,6 +27,7 @@ function App() {
           <Route path="/contacto" element={<ContactPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/registro" element={<RegisterPage />} />
+          <Route path="/perfil" element={<ProfilePage />} />
           <Route path="/login-admin" element={<AdminLoginPage />} />
           <Route path="/admin" element={<AdminPanelPage />} />
           <Route path="/pago" element={<PaymentPage />} />

@@ -1,9 +1,31 @@
 import { Link } from 'react-router-dom';
 import { useApp, formatPrice } from '../context/AppContext.jsx';
 
+const dedupeById = (list = []) => {
+  const seen = new Set();
+  return list.filter((p) => {
+    const key = String(p?.id ?? '');
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+};
+
+const resolveImage = (src) => {
+  if (!src) return '';
+  if (src.startsWith('http')) return src;
+  if (src.startsWith('/assets') || src.startsWith('assets')) {
+    const origin = window.location.origin;
+    return src.startsWith('/') ? `${origin}${src}` : `${origin}/${src}`;
+  }
+  const api = import.meta.env.VITE_API_URL || 'http://localhost:8080/api';
+  const origin = api.replace(/\/api\/?$/, '');
+  return src.startsWith('/api/') ? `${origin}${src}` : `${origin}/${src.replace(/^\//, '')}`;
+};
+
 export const HomePage = () => {
   const { products, addToCart } = useApp();
-  const featured = products.slice(0, 3);
+  const featured = dedupeById(products).slice(0, 3);
 
   return (
     <>
@@ -60,7 +82,7 @@ export const HomePage = () => {
             {featured.map((product) => (
               <div className="col-md-4" key={product.id}>
                 <div className="card h-100 shadow-sm">
-                  <img src={product.image} className="card-img-top" alt={product.name} />
+                  <img src={resolveImage(product.image)} className="card-img-top" alt={product.name} />
                   <div className="card-body d-flex flex-column">
                     <Link to={`/producto/${product.id}`} className="text-decoration-none">
                       <h5 className="card-title">{product.name}</h5>

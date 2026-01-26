@@ -4,7 +4,7 @@ import { useApp, formatPrice } from '../context/AppContext.jsx';
 
 export const PaymentPage = () => {
   const navigate = useNavigate();
-  const { cart, products, cartTotal, clearCart, session, notify } = useApp();
+  const { cart, products, cartTotal, clearCart, session, notify, recordReceipt } = useApp();
   const [form, setForm] = useState({ name: '', last: '', email: '' });
   const [method, setMethod] = useState('');
   const [cuotas, setCuotas] = useState('');
@@ -32,6 +32,11 @@ export const PaymentPage = () => {
       notify('Tu carrito está vacío');
       return;
     }
+    if (!session) {
+      notify('Inicia sesión para completar la compra');
+      navigate('/login');
+      return;
+    }
     if (!form.name.trim() || !form.last.trim()) {
       notify('Completa nombre y apellido');
       return;
@@ -49,6 +54,23 @@ export const PaymentPage = () => {
       notify('Elige una cantidad de cuotas');
       return;
     }
+    const items = cart.map((item) => {
+      const product = products.find((p) => p.id === item.id);
+      if (!product) return null;
+      return { id: product.id, name: product.name, qty: item.qty, price: product.price, line: product.price * item.qty };
+    }).filter(Boolean);
+
+    recordReceipt({
+      userId: session.id,
+      items,
+      subtotal: cartTotal,
+      discount,
+      total: finalTotal,
+      method,
+      cuotas: method === 'credito' ? cuotas : '',
+      buyer: { name: form.name.trim(), last: form.last.trim(), email: form.email.trim() }
+    });
+
     clearCart();
     notify('Pago exitoso, compra finalizada', 5000);
     setTimeout(() => navigate('/'), 5200);

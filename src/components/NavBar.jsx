@@ -34,7 +34,7 @@ export const NavBar = () => {
             )}
             {session && (
               <>
-                <li className="nav-item d-none d-lg-block"><span className="nav-link">Hola, {session.name}</span></li>
+                <li className="nav-item d-none d-lg-block"><Link className="nav-link" to="/perfil">Hola, {session.name}</Link></li>
                 <li className="nav-item"><button className="btn btn-outline-light btn-sm ms-lg-2" type="button" onClick={logout}>Cerrar sesión</button></li>
               </>
             )}

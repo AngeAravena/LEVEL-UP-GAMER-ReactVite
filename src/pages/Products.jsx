@@ -1,13 +1,42 @@
 import { useMemo } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useApp, formatPrice } from '../context/AppContext.jsx';
+import { useEffect } from 'react';
+
+const dedupeById = (list = []) => {
+  const seen = new Set();
+  return list.filter((p) => {
+    const key = String(p?.id ?? '');
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+};
+
+const resolveImage = (src) => {
+  if (!src) return '';
+  if (src.startsWith('http')) return src;
+  if (src.startsWith('/assets') || src.startsWith('assets')) {
+    const origin = window.location.origin;
+    return src.startsWith('/') ? `${origin}${src}` : `${origin}/${src}`;
+  }
+  const api = import.meta.env.VITE_API_URL || 'http://localhost:8080/api';
+  const origin = api.replace(/\/api\/?$/, '');
+  return src.startsWith('/api/') ? `${origin}${src}` : `${origin}/${src.replace(/^\//, '')}`;
+};
 
 export const ProductsPage = () => {
   const { products, cart, addToCart, removeFromCart, updateCartQty, clearCart, notify } = useApp();
   const [params, setParams] = useSearchParams();
   const tipo = params.get('tipo') || '';
+  const productsUniq = useMemo(() => dedupeById(products), [products]);
+  const filtered = useMemo(() => (tipo ? productsUniq.filter((p) => p.type === tipo) : productsUniq), [productsUniq, tipo]);
 
-  const filtered = useMemo(() => (tipo ? products.filter((p) => p.type === tipo) : products), [products, tipo]);
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      console.log('ProductsPage productsUniq', productsUniq.length, productsUniq.map((p) => p.id));
+    }
+  }, [productsUniq]);
 
   const handleFilter = (value) => {
     if (!value) {
@@ -34,7 +63,7 @@ export const ProductsPage = () => {
             {filtered.map((product) => (
               <div className="col-md-6 col-xl-4" key={product.id}>
                 <div className="card h-100 shadow-sm">
-                  <img className="card-img-top" src={product.image} alt={product.name} />
+                  <img className="card-img-top" src={resolveImage(product.image)} alt={product.name} />
                   <div className="card-body d-flex flex-column">
                     <Link to={`/producto/${product.id}`} className="stretched-link text-decoration-none">
                       <h5 className="card-title">{product.name}</h5>

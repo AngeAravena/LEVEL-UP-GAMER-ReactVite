@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import axios from 'axios';
 import { useApp, formatPrice } from '../context/AppContext.jsx';
 
 const emptyProduct = { name: '', price: '', type: 'consola', image: '', description: '' };
@@ -10,6 +11,7 @@ export const AdminPanelPage = () => {
   const { session, products, users, upsertProduct, deleteProduct, upsertUser, deleteUser } = useApp();
   const [productForm, setProductForm] = useState(emptyProduct);
   const [editingProductId, setEditingProductId] = useState(null);
+  const [file, setFile] = useState(null);
   const [userForm, setUserForm] = useState(emptyUser);
   const [editingUserId, setEditingUserId] = useState(null);
   const [userError, setUserError] = useState('');
@@ -20,17 +22,31 @@ export const AdminPanelPage = () => {
     }
   }, [session, navigate]);
 
-  const handleProductSubmit = (e) => {
+  const handleProductSubmit = async (e) => {
     e.preventDefault();
     if (!productForm.name || !productForm.price) return;
-    const payload = {
-      ...productForm,
-      price: Number(productForm.price),
-      type: productForm.type
-    };
-    upsertProduct(payload, editingProductId);
-    setProductForm(emptyProduct);
-    setEditingProductId(null);
+    try {
+      const form = new FormData();
+      form.append('producto', new Blob([JSON.stringify({
+        name: productForm.name,
+        price: Number(productForm.price),
+        type: productForm.type,
+        description: productForm.description
+      })], { type: 'application/json' }));
+      if (file) form.append('file', file);
+
+      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080/api';
+      const { data } = await axios.post(`${API_URL}/productos`, form);
+
+      // sincroniza con estado local (usa id del backend)
+      upsertProduct({ ...productForm, image: data.image, price: Number(data.price) }, data.id);
+
+      setProductForm(emptyProduct);
+      setEditingProductId(null);
+      setFile(null);
+    } catch (err) {
+      console.error('Error creando producto', err);
+    }
   };
 
   const handleUserSubmit = (e) => {
@@ -48,6 +64,7 @@ export const AdminPanelPage = () => {
   const handleEditProduct = (product) => {
     setEditingProductId(product.id);
     setProductForm({ name: product.name, price: product.price, type: product.type, image: product.image, description: product.description });
+    setFile(null);
   };
 
   const handleEditUser = (user) => {
@@ -95,8 +112,8 @@ export const AdminPanelPage = () => {
                   </div>
                 </div>
                 <div>
-                  <label className="form-label">Imagen (Usar formato final .jpg, .png, etc.)</label>
-                  <input className="form-control" type="text" name="image" placeholder="/assets/images/..." value={productForm.image} onChange={(e) => setProductForm((prev) => ({ ...prev, image: e.target.value }))} required />
+                  <label className="form-label">Imagen (.jpg, .png)</label>
+                  <input type="file" accept="image/*" onChange={e => setFile(e.target.files[0])} />
                 </div>
                 <div>
                   <label className="form-label">Descripción</label>
